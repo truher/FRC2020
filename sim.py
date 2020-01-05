@@ -53,13 +53,16 @@ def isCenterDefender(opp):
 def isSupplyDefender(opp):
     return opp.role == 4 and opp.zone == 3
 
-def cycleTime(shooter, opp1, opp2, opp3, defense_effectiveness):
+# speed is time to get across the field
+def cycleTime(shooter, opp1, opp2, opp3, defense_effectiveness, speed):
     if shooter.role != 1 and shooter.role != 2:
         return 0
     defense = 1.0 # default = no defense
     uncontested_cycle_time = 0
+    LOAD = 5 
+    SHOOT = 5 
     if shooter.rng == 1: # short
-        uncontested_cycle_time = 30
+        uncontested_cycle_time = LOAD + speed + SHOOT + speed
         if shooter.route == 1: # inside
             if (isSupplyDefender(opp1) or isSupplyDefender(opp2) or isSupplyDefender(opp3)
                 or isTargetDefender(opp1) or isTargetDefender(opp2) or isTargetDefender(opp3)):
@@ -70,7 +73,7 @@ def cycleTime(shooter, opp1, opp2, opp3, defense_effectiveness):
                 or isTargetDefender(opp1) or isTargetDefender(opp2) or isTargetDefender(opp3)):
                 defense = defense_effectiveness # outside is slowed everywhere
     elif shooter.rng == 2: # med
-        uncontested_cycle_time = 20
+        uncontested_cycle_time = LOAD + 0.75 * speed + SHOOT + 0.75 * speed
         if shooter.route == 1: # inside
             if (isSupplyDefender(opp1) or isSupplyDefender(opp2) or isSupplyDefender(opp3)):
                 defense = defense_effectiveness # inside is slowed at the ends
@@ -79,7 +82,7 @@ def cycleTime(shooter, opp1, opp2, opp3, defense_effectiveness):
                 or isCenterDefender(opp1) or isCenterDefender(opp2) or isCenterDefender(opp3)):
                 defense = defense_effectiveness # outside is slowed everywhere
     elif shooter.rng == 3: # long
-        uncontested_cycle_time = 10
+        uncontested_cycle_time = LOAD + 0.25 * speed + SHOOT + 0.25 * speed
         if (isSupplyDefender(opp1) or isSupplyDefender(opp2) or isSupplyDefender(opp3)):
             defense = defense_effectiveness # inside is slowed at the ends
     return uncontested_cycle_time * defense
@@ -124,27 +127,27 @@ def percentage(shooter, opp1, opp2, opp3, defense_effectiveness, accuracy):
             uncontested_pct = 0.0 # long inner shots are impossible
     return uncontested_pct / defense
 
-def shots(shooter, opp1, opp2, opp3, defense_effectiveness):
+def shots(shooter, opp1, opp2, opp3, defense_effectiveness, speed):
     if shooter.role != 1 and shooter.role != 2:
         return 0
-    cyc = cycleTime(shooter, opp1, opp2, opp3, defense_effectiveness)
+    cyc = cycleTime(shooter, opp1, opp2, opp3, defense_effectiveness, speed)
     if cyc == 0:
         return 0
     return 5 * MATCH_SEC // cyc # assume infinite supply
 
-def looseBalls(shooter, opp1, opp2, opp3, defense_effectiveness, accuracy):
-    return (shots(shooter, opp1, opp2, opp3, defense_effectiveness)
+def looseBalls(shooter, opp1, opp2, opp3, defense_effectiveness, accuracy, speed):
+    return (shots(shooter, opp1, opp2, opp3, defense_effectiveness, speed)
             * (1 - percentage(shooter, opp1, opp2, opp3, defense_effectiveness, accuracy)))
 
 def isPasser(shooter): # special case, long low = passing to rebounder
     return shooter.role == 1 and shooter.rng == 3 and shooter.target == 1
 
-def rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy): # ignores second rebounds
+def rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy, speed): # ignores second rebounds
     if same1.role != 1:
         return 0,0
-    balls = looseBalls(same1, opp1, opp2, opp3, defense_effectiveness, accuracy)
-    fetch_time_sec = (1 if isPasser(same1) else 5)
-    shot_time_sec=  1
+    balls = looseBalls(same1, opp1, opp2, opp3, defense_effectiveness, accuracy, speed)
+    fetch_time_sec = (2 if isPasser(same1) else 4) # TODO: sensitivity?
+    shot_time_sec = 1 # TODO: is this right?
     cycle_time = fetch_time_sec + shot_time_sec
     balls_shot = min(balls, MATCH_SEC/cycle_time)
     return balls_shot, cycle_time
@@ -164,9 +167,9 @@ def ballScore(shooter, scored_balls):
     elif shooter.target == 3:
         return scored_balls * 3
 
-def scoreImpl(me, same1, same2, opp1, opp2, opp3, defense_effectiveness, accuracy, debug=False):
+def scoreImpl(me, same1, same2, opp1, opp2, opp3, defense_effectiveness, accuracy, speed, debug=False):
     if me.role == 1:  # shooter
-        shot_cnt = shots(me, opp1, opp2, opp3, defense_effectiveness)
+        shot_cnt = shots(me, opp1, opp2, opp3, defense_effectiveness, speed)
         pct = percentage(me, opp1, opp2, opp3, defense_effectiveness, accuracy)
         scored_balls = math.floor(shot_cnt * pct)
         misses = shot_cnt - scored_balls
@@ -175,8 +178,8 @@ def scoreImpl(me, same1, same2, opp1, opp2, opp3, defense_effectiveness, accurac
     elif me.role == 2: # rebounder
         score = 0
         if same1.role == 1 and same2.role == 1: # two shooters
-            balls_shot1, cycle_time1 = rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy)
-            balls_shot2, cycle_time2 = rebounds(same2, opp1, opp2, opp3, defense_effectiveness, accuracy)
+            balls_shot1, cycle_time1 = rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy, speed)
+            balls_shot2, cycle_time2 = rebounds(same2, opp1, opp2, opp3, defense_effectiveness, accuracy, speed)
             total_balls = max(totalRebounds(balls_shot1, cycle_time1, balls_shot2, cycle_time2),
                               totalRebounds(balls_shot2, cycle_time2, balls_shot1, cycle_time1))
             pct = percentage(me, opp1, opp2, opp3, defense_effectiveness, accuracy)
@@ -184,28 +187,28 @@ def scoreImpl(me, same1, same2, opp1, opp2, opp3, defense_effectiveness, accurac
             if debug: print(f"two shooters, one rebounder [{me}] balls {total_balls} pct {pct}")
             return ballScore(me, scored_balls)
         elif same1.role == 1 and same2.role == 2: # one shooter, another rebounder
-            balls_shot1, cycle_time1 = rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy)
+            balls_shot1, cycle_time1 = rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy, speed)
             total_balls = balls_shot1 // 2 # share with other rebounder
             pct = percentage(me, opp1, opp2, opp3, defense_effectiveness, accuracy)
             scored_balls = math.floor(total_balls * pct)
             if debug: print(f"one shooter, two rebounders [{me}] balls {total_balls} pct {pct}")
             return ballScore(me, scored_balls)
         elif same1.role == 2 and same2.role == 1: # one shooter, another rebounder
-            balls_shot2, cycle_time2 = rebounds(same2, opp1, opp2, opp3, defense_effectiveness, accuracy)
+            balls_shot2, cycle_time2 = rebounds(same2, opp1, opp2, opp3, defense_effectiveness, accuracy, speed)
             total_balls = balls_shot2 // 2 # share with other rebounder
             pct = percentage(me, opp1, opp2, opp3, defense_effectiveness, accuracy)
             scored_balls = math.floor(total_balls * pct)
             if debug: print(f"one shooter, two rebounders [{me}] balls {total_balls} pct {pct}")
             return ballScore(me, scored_balls)
         elif same1.role == 1: # one shooter
-            balls_shot1, cycle_time1 = rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy)
+            balls_shot1, cycle_time1 = rebounds(same1, opp1, opp2, opp3, defense_effectiveness, accuracy, speed)
             total_balls = balls_shot1
             pct = percentage(me, opp1, opp2, opp3, defense_effectiveness, accuracy)
             scored_balls = math.floor(total_balls * pct)
             if debug: print(f"one shooter one rebounder [{me}] balls {total_balls} pct {pct}")
             return ballScore(me, scored_balls)
         elif same2.role == 1: # one shooter
-            balls_shot2, cycle_time2 = rebounds(same2, opp1, opp2, opp3, defense_effectiveness, accuracy)
+            balls_shot2, cycle_time2 = rebounds(same2, opp1, opp2, opp3, defense_effectiveness, accuracy, speed)
             total_balls = balls_shot2
             pct = percentage(me, opp1, opp2, opp3, defense_effectiveness, accuracy)
             scored_balls = math.floor(total_balls * pct)
@@ -219,24 +222,24 @@ def scoreImpl(me, same1, same2, opp1, opp2, opp3, defense_effectiveness, accurac
     elif  me.role == 4:
         return 0
 
-def score(config, defense_effectiveness, accuracy, debug=False):
+def score(config, defense_effectiveness, accuracy, speed, debug=False):
     red1 = config[0]
     red2 = config[1]
     red3 = config[2]
     blue1 = config[3]
     blue2 = config[4]
     blue3 = config[5]
-    red = (scoreImpl(red1, red2, red3, blue1, blue2, blue3, defense_effectiveness, accuracy, debug)
-         + scoreImpl(red2, red1, red3, blue1, blue2, blue3, defense_effectiveness, accuracy, debug)
-         + scoreImpl(red3, red1, red2, blue1, blue2, blue3, defense_effectiveness, accuracy, debug))
+    red = (scoreImpl(red1, red2, red3, blue1, blue2, blue3, defense_effectiveness, accuracy, speed, debug)
+         + scoreImpl(red2, red1, red3, blue1, blue2, blue3, defense_effectiveness, accuracy, speed, debug)
+         + scoreImpl(red3, red1, red2, blue1, blue2, blue3, defense_effectiveness, accuracy, speed, debug))
     if debug:
         print(f"red {red}")
         print(red1)
         print(red2)
         print(red3)
-    blue = (scoreImpl(blue1, blue2, blue3, red1, red2, red3, defense_effectiveness, accuracy, debug)
-         + scoreImpl(blue2, blue1, blue3, red1, red2, red3, defense_effectiveness, accuracy, debug)
-         + scoreImpl(blue3, blue1, blue2, red1, red2, red3, defense_effectiveness, accuracy, debug))
+    blue = (scoreImpl(blue1, blue2, blue3, red1, red2, red3, defense_effectiveness, accuracy, speed, debug)
+         + scoreImpl(blue2, blue1, blue3, red1, red2, red3, defense_effectiveness, accuracy, speed, debug)
+         + scoreImpl(blue3, blue1, blue2, red1, red2, red3, defense_effectiveness, accuracy, speed, debug))
     if debug:
         print(f"blue {blue}")
         print(blue1)
@@ -250,7 +253,7 @@ def perturb(c, alliance): # 1 is red, 2 is blue
     cc[ci] = randAgent()
     return cc
 
-def findBest(defense_effectiveness, accuracy):
+def findBest(defense_effectiveness, accuracy, speed):
     high_score_sum = 0
     best_c = None
     best_r = 0
@@ -258,10 +261,10 @@ def findBest(defense_effectiveness, accuracy):
     for i in range(0,5):
         c = [randAgent(), randAgent(), randAgent(), randAgent(), randAgent(), randAgent()]
         for p in range(0,6000):
-            r, b = score(c, defense_effectiveness, accuracy)
+            r, b = score(c, defense_effectiveness, accuracy, speed)
             alliance = randint(1,2) # perturb one team's strategy
             pc = perturb(c, alliance)
-            pcr, pcb = score(pc, defense_effectiveness, accuracy)
+            pcr, pcb = score(pc, defense_effectiveness, accuracy, speed)
             base_score_diff = (r - b) if alliance == 1 else (b - r)
             new_score_diff = (pcr - pcb) if alliance == 1 else (pcb - pcr)
             if (new_score_diff > base_score_diff):
@@ -270,7 +273,7 @@ def findBest(defense_effectiveness, accuracy):
         if False:
             print("")
             print("iter %d" % i)
-        r, b = score(c, defense_effectiveness, accuracy)
+        r, b = score(c, defense_effectiveness, accuracy, speed)
         if r+b > high_score_sum:
             best_c = c
             best_r = r
@@ -280,18 +283,19 @@ def findBest(defense_effectiveness, accuracy):
 
 # random initialization, then greedy
 def main():
-    for defense_effectiveness in [1.5, 2.0]:
+    for defense_effectiveness in [1.25, 1.75]:
         for accuracy in [0.8, 0.5]:
-            best_c, best_r, best_b = findBest(defense_effectiveness, accuracy)
-            print(f"defense_effectiveness {defense_effectiveness} accuracy {accuracy}")
-            print(f"red {best_r}")
-            print(best_c[0])
-            print(best_c[1])
-            print(best_c[2])
-            print(f"blue {best_b}")
-            print(best_c[3])
-            print(best_c[4])
-            print(best_c[5])
+            for speed in [5, 10]:  # time to traverse field from one end to the other
+                best_c, best_r, best_b = findBest(defense_effectiveness, accuracy, speed)
+                print(f"defense_effectiveness {defense_effectiveness} accuracy {accuracy} speed {speed}")
+                print(f"red {best_r}")
+                print(best_c[0])
+                print(best_c[1])
+                print(best_c[2])
+                print(f"blue {best_b}")
+                print(best_c[3])
+                print(best_c[4])
+                print(best_c[5])
         
 
 if __name__ == '__main__':
