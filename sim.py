@@ -13,16 +13,26 @@ class Agent:
         self.rng = rng # [short, medium, long]
         self.target = target # [low, high, inner]
         self.zone = zone # [target, center, supply]
+
     def __str__(self):
-        return (f"role: {self.rolestr()}"
-                f", route: {self.routestr()}"
-                f", range: {self.rangestr()}"
-                f", target: {self.targetstr()}"
-                f", zone: {self.zonestr()}")
+        if self.role == 1:
+            return (f"shooter, route: {self.routestr()}"
+                    f", range: {self.rangestr()}"
+                    f", target: {self.targetstr()}"
+)
+        elif self.role == 2:
+            return (f"rebounder, route: {self.routestr()}"
+                    f", range: {self.rangestr()}"
+                    f", target: {self.targetstr()}")
+        elif self.role == 3:
+            return (f"guard")
+        elif self.role == 4:
+            return (f"defender, zone: {self.zonestr()}")
+
     def rolestr(self):
         if self.role == 1: return "shooter"
         if self.role == 2: return "rebounder"
-        if self.role == 3: return "guard"
+        if self.role == 3: return "guard" # TODO: implement guarding
         if self.role == 4: return "defender"
     def routestr(self):
         if self.route == 1: return "trench"
@@ -280,7 +290,6 @@ def findBest(defense_effectiveness, accuracy, speed):
             best_b = b
     return best_c, best_r, best_b
 
-
 # random initialization, then greedy
 def main():
     for defense_effectiveness in [1.25, 1.75]:
@@ -289,13 +298,11 @@ def main():
                 best_c, best_r, best_b = findBest(defense_effectiveness, accuracy, speed)
                 print(f"defense_effectiveness {defense_effectiveness} accuracy {accuracy} speed {speed}")
                 print(f"red {best_r}")
-                print(best_c[0])
-                print(best_c[1])
-                print(best_c[2])
+                reds = [str(best_c[0]), str(best_c[1]), str(best_c[2])].sort()
+                print("\n".join(reds))
                 print(f"blue {best_b}")
-                print(best_c[3])
-                print(best_c[4])
-                print(best_c[5])
+                blues = [str(best_c[3]), str(best_c[4]), str(best_c[5])].sort()
+                print("\n".join(blues))
         
 
 if __name__ == '__main__':
